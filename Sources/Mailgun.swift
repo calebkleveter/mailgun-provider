@@ -5,6 +5,7 @@ import FormData
 import Multipart
 import Vapor
 
+// MARK: Mailgun
 public final class Mailgun: MailProtocol {
     public let clientFactory: ClientFactoryProtocol
     public let apiURI: URI
@@ -16,18 +17,21 @@ public final class Mailgun: MailProtocol {
         apiKey: String,
         _ clientFactory: ClientFactoryProtocol
         ) throws {
-        self.apiURI = try URI("https://api.mailgun.net/v3/\(domain)/")
+        self.apiURI = try URI("https://api.mailgun.net/v3/")
         self.clientFactory = clientFactory
         self.apiKey = apiKey
         self.domain = domain
     }
-    
+}
+
+// MARK: Sending Emails
+extension Mailgun {
     public func send(_ emails: [Email]) throws {
         try emails.forEach(_send)
     }
     
     private func _send(_ mail: Email) throws {
-        let uri = apiURI.appendingPathComponent("messages")
+        let uri = apiURI.appendingPathComponent(domain).appendingPathComponent("messages")
         let req = Request(method: .post, uri: uri)
         
         let basic = "api:\(apiKey)".makeBytes().base64Encoded.makeString()
@@ -99,9 +103,13 @@ public final class Mailgun: MailProtocol {
             port: apiURI.port ?? 443,
             securityLayer: .tls(EngineClient.defaultTLSContext())
         )
+        
         let res = try client.respond(to: req)
         guard res.status.statusCode < 400 else {
-            throw Abort.badRequest
+            guard let json = res.json else {
+                throw Abort.badRequest
+            }
+            throw Abort(.badRequest, metadata: json.makeNode(in: nil))
         }
     }
 }
